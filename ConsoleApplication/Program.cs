@@ -1,5 +1,9 @@
 ﻿using System.IO;
 using CodePound.SamsonForce.Core;
+using System;
+using System.Xml.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace CodePound.SamsonForce.ConsoleApplication
 {
@@ -7,10 +11,9 @@ namespace CodePound.SamsonForce.ConsoleApplication
     {
         static void Main(string[] args)
         {
-            BruteForceSpecial attacker = new BruteForceSpecial();
+            BruteForceSpecial attacker = new BruteForceSpecial(args[1]);
             string[] dictionary = File.ReadAllLines(args[0]);
-
-            attacker.FindPrivateKey(dictionary, args[1]);
+            string paraphrase = attacker.FindPrivateKey(dictionary);
         }
     }
 }
