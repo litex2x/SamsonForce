@@ -7,7 +7,6 @@ using Combinatorics;
 using Combinatorics.Collections;
 using System.Threading;
 using System.Collections.Concurrent;
-using MathNet.Numerics;
 using System.Text.RegularExpressions;
 
 namespace CodePound.SamsonForce.Core
@@ -31,7 +30,6 @@ namespace CodePound.SamsonForce.Core
 
         public string FindPrivateKey(string[] dictionary)
         {
-            double combinations = SpecialFunctions.Factorial(dictionary.Length) / (SpecialFunctions.Factorial(3) * SpecialFunctions.Factorial(dictionary.Length - 3));
             int combinationIndex = 0;
 
             Dictionary = dictionary;
@@ -47,7 +45,7 @@ namespace CodePound.SamsonForce.Core
                     {
                         manualResetEvents[combinationIndex % 64] = new ManualResetEvent(false);
                         ThreadPool.QueueUserWorkItem(SeekCandidateThread, string.Format("{0},{1},{2},{3}", first, second, third, combinationIndex % 64));
-                        WaitForThreads(combinationIndex + 1, manualResetEvents, combinations);
+                        WaitForThreads(combinationIndex + 1, manualResetEvents);
                         combinationIndex++;
                     }
                 }
