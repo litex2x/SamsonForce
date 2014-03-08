@@ -15,9 +15,7 @@ namespace CodePound.SamsonForce.Core
     {
         private const string numerics = "0123456789";
         private ManualResetEvent[] manualResetEvents = null;
-
-        private ConcurrentBag<string> CandidatesThreadSafe { get; set; }
-        private string[] Candidates { get; set; }
+        private bool isMatchFound = false;
 
         private string Address { get; set; }
         private string Paraphrase { get; set; }
@@ -33,35 +31,22 @@ namespace CodePound.SamsonForce.Core
             int combinationIndex = 0;
 
             Dictionary = dictionary;
-            CandidatesThreadSafe = new ConcurrentBag<string>();
             manualResetEvents = new ManualResetEvent[64];
-            Console.WriteLine("Preparing candidates...");
+            Paraphrase = "-1";
+            Console.WriteLine("Running Samson Force algorithm...");
 
-            for (int first = 0; first < dictionary.Length; first++)
+            for (int first = 0; first < dictionary.Length && !isMatchFound; first++)
             {
-                for (int second = first + 1; second < dictionary.Length; second++)
+                for (int second = first + 1; second < dictionary.Length && !isMatchFound; second++)
                 {
-                    for (int third = second + 1; third < dictionary.Length; third++)
+                    for (int third = second + 1; third < dictionary.Length && !isMatchFound; third++)
                     {
                         manualResetEvents[combinationIndex % 64] = new ManualResetEvent(false);
-                        ThreadPool.QueueUserWorkItem(SeekCandidateThread, string.Format("{0},{1},{2},{3}", first, second, third, combinationIndex % 64));
+                        ThreadPool.QueueUserWorkItem(ProcessCombination, string.Format("{0},{1},{2},{3}", first, second, third, combinationIndex % 64));
                         WaitForThreads(combinationIndex + 1, manualResetEvents);
                         combinationIndex++;
                     }
                 }
-            }
-
-            WaitHandle.WaitAll(manualResetEvents.Where(x => x != null).ToArray());
-            Console.WriteLine("Running Samson Force algorithm...");
-            manualResetEvents = new ManualResetEvent[64];
-            Paraphrase = "-1";
-            Candidates = CandidatesThreadSafe.ToArray();
-
-            for (int i = 0; i < CandidatesThreadSafe.Count; i++)
-            {
-                manualResetEvents[i % 64] = new ManualResetEvent(false);
-                ThreadPool.QueueUserWorkItem(BruteForceThread, i % 64);
-                WaitForThreads(i + 1, manualResetEvents, CandidatesThreadSafe.Count);
             }
 
             WaitHandle.WaitAll(manualResetEvents.Where(x => x != null).ToArray());
@@ -78,7 +63,7 @@ namespace CodePound.SamsonForce.Core
             return Paraphrase;
         }
 
-        private List<string> CreateCandidates(string[] values, string numerics)
+        private string[] CreateCandidates(string[] values, string numerics)
         {
             List<string> candidates = new List<string>();
             Permutations<string> permutations = new Permutations<string>(values, GenerateOption.WithoutRepetition);
@@ -91,59 +76,69 @@ namespace CodePound.SamsonForce.Core
                 }
             }
 
-            return candidates;
+            return candidates.ToArray();
         }
 
-        private void WaitForThreads(int runningTotal, ManualResetEvent[] workingThreads, double total = 0)
+        private void WaitForThreads(int runningTotal, ManualResetEvent[] workingThreads)
         {
             if (runningTotal % 64 == 0)
             {
                 WaitHandle.WaitAll(workingThreads);
-
-                if (total != 0)
-                {
-                    Console.WriteLine(string.Format("{0} of {1}", runningTotal, total));
-                }
             }
         }
 
-        private void SeekCandidateThread(Object threadContext)
+        private void ProcessCombination(Object threadContext)
         {
-            List<string> newCandidates = null;
-            int[] arguements = threadContext.ToString().Split(',').Select(x => Convert.ToInt32(x)).ToArray();
-            string candidate = (Dictionary[arguements[0]] + Dictionary[arguements[1]] + Dictionary[arguements[2]]).ToLower();
+            string[] candidates = null;
+            int[] arguements = null;
+            string possibleCandidate = null;
 
-            if (Regex.Match(candidate, "^[a-z]{17}$").Success)
+            if (isMatchFound)
             {
-                newCandidates = CreateCandidates(new string[] 
+                return;
+            }
+
+            arguements = threadContext.ToString().Split(',').Select(x => Convert.ToInt32(x)).ToArray();
+            possibleCandidate = (Dictionary[arguements[0]] + Dictionary[arguements[1]] + Dictionary[arguements[2]]).ToLower();
+
+            if (Regex.Match(possibleCandidate, "^[a-z]{17}$").Success)
+            {
+                candidates = CreateCandidates(new string[] 
                     { 
                         Dictionary[arguements[0]].ToLower(), 
                         Dictionary[arguements[1]].ToLower(), 
                         Dictionary[arguements[2]].ToLower() 
                     },
                     numerics);
-                newCandidates.ForEach(x => CandidatesThreadSafe.Add(x));
+                foreach(string candidate in candidates)
+                {
+                    isMatchFound = IsMatch(candidate);
+                }
             }
 
             manualResetEvents[arguements[3]].Set();
         }
 
-        private void BruteForceThread(Object threadContext)
+        private bool IsMatch(string value)
         {
             BitcoinKeyPair pair = null;
             BitcoinAddress walletAddress = null;
             Base58Check encoder = new Base58Check();
-            int i = (int)threadContext;
 
-            pair = new BitcoinKeyPair(Candidates[i]);
+            pair = new BitcoinKeyPair(value);
             walletAddress = new BitcoinAddress(pair.PublicKey);
+            Console.WriteLine(string.Format("Testing: {0}", value));
 
             if (encoder.Encode(walletAddress.Address).ToLower() == Address.ToLower())
             {
-                Paraphrase = Candidates[i];
-            }
+                Paraphrase = value;
 
-            manualResetEvents[i].Set();
+                return true;
+            }
+            else
+            {
+                return false;
+            }
         }
     }
 }
